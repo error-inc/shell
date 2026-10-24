@@ -19,3 +19,6 @@ Read line -> tokenize -> check builtins -> fork/exec -> wait.
 ## Known limitations
 - Lines over 1023 characters are split into separate commands.
 - `strtok` doesn't handle quotes (fixed in the next milestone).
+
+## Tokenizer
+- Custom Tokenizer uses inplace editing with r/w index design and then the input is tokenized
