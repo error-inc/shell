@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 
+#define MAX_ARGS 64
+
 int run_builtin (char** argv)
 {
 	if (strcmp(argv[0],"cd") == 0)
@@ -73,71 +75,82 @@ int tokenizer(char* line, char** argv, int max)
 
 	return 0;
 }	
+
+static void run_external(char** argv)
+{	pid_t p = fork();
+	if (p < 0)
+	{
+		perror("Fork Failed!");
+		return;
+	}
+	if (p == 0)
+	{
+		execvp(argv[0], argv);
+		perror(argv[0]);
+		_exit(1);
+	}
+	else
+	{
+		int status;
+		waitpid(p, &status, 0);
+	}
+}
+
+static int read_line(char *buf, size_t size)
+{
+	if (fgets(buf, (int)size, stdin) == NULL)
+		return 0;
+
+	if (strchr(buf, '\n') == NULL && !feof(stdin))
+	{
+		int ch;
+		while ((ch = getchar()) != '\n' && ch != EOF);
+		return -1;
+	}
+
+	buf[strcspn(buf, "\n")] = '\0';
+	return 1;
+}
 				
-			
-
-
 int main(void)
 {
 	char c[1024];
-	while(1)
+	while (1)
 	{
 		printf(">");
 		fflush(stdout);
-		if(fgets(c, sizeof(c), stdin) == NULL)
-		{
+
+		int got = read_line(c, sizeof(c));
+		if (got == 0)
 			break;
-		}
-		c[strcspn(c, "\n")] = '\0';
-		char* argv[64];
-		
-		// argv[63] = NULL; //not required tokenizer itself writes terminalting NULL
-		int token_result = tokenizer(&c[0],&argv[0],64);
-		if(token_result == -2)
+		if (got == -1)
 		{
-			fprintf(stderr,"Syntax Error: unclosed quote\n");
+			fprintf(stderr, "Line too long (limit %zu characters)\n", sizeof(c) - 1);
 			continue;
 		}
-		if(token_result == -1)
+
+		char *argv[MAX_ARGS];
+		int token_result = tokenizer(c, argv, MAX_ARGS);
+		if (token_result == -2)
 		{
-			fprintf(stderr, "Too many Arguments: limit->63\n");
+			fprintf(stderr, "Syntax Error: unclosed quote\n");
+			continue;
+		}
+		if (token_result == -1)
+		{
+			fprintf(stderr, "Too many arguments (limit %d)\n", MAX_ARGS - 1);
 			continue;
 		}
 		if (argv[0] == NULL)
-		{
 			continue;
-		}	
 
-		if (strcmp(argv[0],"exit") == 0)
-		{
+		if (strcmp(argv[0], "exit") == 0)
 			break;
-		}
 		if (run_builtin(argv))
-		{
 			continue;
-		}
-		pid_t p = fork();
-		if (p < 0)
-		{
-			perror("Fork Failed!");
-			continue;
-		}
-		if (p == 0)
-		{
-			execvp(argv[0], argv);
-			perror(argv[0]);
-			_exit(1);
-		}
-		else
-		{
-			int status;
-			waitpid(p, &status, 0);
-		}
-
+		run_external(argv);
 	}
 	if (feof(stdin))
-	{
 		printf("\n");
-	}
 	return 0;
 }
