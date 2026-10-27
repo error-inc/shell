@@ -6,7 +6,11 @@
 
 #define MAX_ARGS 64
 
-int run_builtin (char** argv)
+typedef enum {
+	PLAIN, IN_SINGLE, IN_DOUBLE
+} char_state;
+
+static int run_builtin (char** argv)
 {
 	if (strcmp(argv[0],"cd") == 0)
 	{
@@ -25,9 +29,9 @@ int run_builtin (char** argv)
 	return 0;
 }
 
-int tokenizer(char* line, char** argv, int max)
+static int tokenizer(char* line, char** argv, int max)
 {
-	int state = 0; // 0: plain, 1: single_quote, 2: double_quote
+	char_state state = PLAIN;
 	int r=0;
 	int w = 0;
 	int count = 0;
@@ -37,14 +41,14 @@ int tokenizer(char* line, char** argv, int max)
 		argv[count] = &line[w];
 		while(line[r] != '\0')
 		{
-			if(state == 1)
+			if(state == IN_SINGLE)
 			{
-				if(line[r] == '\'') state = 0;	
+				if(line[r] == '\'') state = PLAIN;	
 				else line[w++] = line[r];
 			}
-			else if(state == 2)
+			else if(state == IN_DOUBLE)
 			{
-				if(line[r] == '"') state = 0;
+				if(line[r] == '"') state = PLAIN;
 				else line[w++] = line[r];
 			}
 			else
@@ -54,9 +58,9 @@ int tokenizer(char* line, char** argv, int max)
 					break;
 				}
 				if(line[r] == '\'')
-					state = 1;
+					state = IN_SINGLE;
 				else if(line[r] == '"')
-					state = 2;
+					state = IN_DOUBLE;
 				else
 					line[w++] = line[r];
 			}
@@ -76,24 +80,28 @@ int tokenizer(char* line, char** argv, int max)
 	return 0;
 }	
 
-static void run_external(char** argv)
-{	pid_t p = fork();
+static int run_external(char** argv)
+{	
+	pid_t p = fork();
 	if (p < 0)
 	{
 		perror("Fork Failed!");
-		return;
+		return 1;
 	}
 	if (p == 0)
 	{
 		execvp(argv[0], argv);
 		perror(argv[0]);
-		_exit(1);
+		_exit(127);
 	}
-	else
-	{
-		int status;
-		waitpid(p, &status, 0);
-	}
+
+	int status;
+	waitpid(p, &status, 0);
+	if (WIFEXITED(status))
+		return WEXITSTATUS(status);
+	if (WIFSIGNALED(status))
+		return 128 + WTERMSIG(status);
+	return 1;
 }
 
 static int read_line(char *buf, size_t size)
@@ -115,6 +123,7 @@ static int read_line(char *buf, size_t size)
 int main(void)
 {
 	char c[1024];
+	[[maybe_unused]] int last_status = 0;
 	while (1)
 	{
 		printf(">");
@@ -148,7 +157,7 @@ int main(void)
 			break;
 		if (run_builtin(argv))
 			continue;
-		run_external(argv);
+		last_status = run_external(argv);
 	}
 	if (feof(stdin))
 		printf("\n");

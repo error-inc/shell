@@ -15,6 +15,9 @@ Read line -> tokenize -> check builtins -> fork/exec -> wait.
   Mitigated by a 1024-byte buffer; proper detection is still to do.
 - `argv` wasn't always NULL-terminated for very long lines. Fixed by
   setting the last slot to NULL up front.
+- Added enumeration for state for deciding if char is in single quote or double quote or plain text (rather than using int states, so its more readable)
+- Made run\_builtin(), run\_external(), tokenizer() functions static so they have local scope in file.
+- Added return code for run\_external() function and others too for later adding exit code checking through "$?"
 
 ## Known limitations
 - Lines over 1023 characters are split into separate commands.
